@@ -27,15 +27,17 @@ data = {
 dates = np.array(data['Date'], dtype='datetime64')
 numbers = np.array(data['Numbers'])
 
+
 # Function to create sequences with dates and numbers
 def create_sequences_with_dates(dates, numbers, n_steps):
     X, y = [], []
     for i in range(n_steps, len(numbers)):
-        seq_dates = (dates[i-n_steps:i] - dates[i-n_steps]).astype('timedelta64[D]').astype(int)
-        seq_numbers = numbers[i-n_steps:i].flatten()
+        seq_dates = (dates[i - n_steps:i] - dates[i - n_steps]).astype('timedelta64[D]').astype(int)
+        seq_numbers = numbers[i - n_steps:i].flatten()
         X.append(np.concatenate((seq_dates, seq_numbers)))
         y.append(numbers[i])
     return np.array(X), np.array(y)
+
 
 # Create sequences with dates
 X, y = create_sequences_with_dates(dates, numbers, 3)
@@ -50,6 +52,7 @@ y = scaler_y.fit_transform(y)
 # Reshape for LSTM
 X = X.reshape((X.shape[0], 1, X.shape[1]))
 
+
 # Build LSTM model
 def build_model(n_steps, n_features):
     model = Sequential()
@@ -59,12 +62,22 @@ def build_model(n_steps, n_features):
     model.compile(optimizer='adam', loss='mse')
     return model
 
-# Train the model
-n_steps, n_features = X.shape[1], X.shape[2]
-model = build_model(n_steps, n_features)
-model.fit(X, y, epochs=100, batch_size=1, verbose=2)
 
-# Make prediction
+# Function to train the model and make predictions
+def train_and_predict(X, y, last_3_combined_scaled, scaler_y):
+    n_steps, n_features = X.shape[1], X.shape[2]
+    model = build_model(n_steps, n_features)
+    model.fit(X, y, epochs=100, batch_size=1, verbose=2)
+
+    prediction = model.predict(last_3_combined_scaled)
+    prediction = scaler_y.inverse_transform(prediction).flatten()
+
+    # Round the predicted numbers to the nearest integers
+    predicted_numbers = np.round(prediction).astype(int)
+    return predicted_numbers
+
+
+# Prepare the input for prediction
 last_3_dates = (dates[-3:] - dates[-3]).astype('timedelta64[D]').astype(int)
 last_3_numbers = numbers[-3:].flatten()
 last_3_combined = np.concatenate((last_3_dates, last_3_numbers)).reshape(1, -1)
@@ -72,12 +85,16 @@ last_3_combined = np.concatenate((last_3_dates, last_3_numbers)).reshape(1, -1)
 # Scale the combined last 3 inputs using the scaler for X
 last_3_combined_scaled = scaler_X.transform(last_3_combined).reshape((1, 1, last_3_combined.shape[1]))
 
-prediction = model.predict(last_3_combined_scaled)
-prediction = scaler_y.inverse_transform(prediction).flatten()
+# Make 5 different predictions
+n_predictions = 5
+predictions = []
+for _ in range(n_predictions):
+    predicted_numbers = train_and_predict(X, y, last_3_combined_scaled, scaler_y)
+    predictions.append(predicted_numbers)
 
-# Round the predicted numbers to the nearest integers
-predicted_numbers = np.round(prediction).astype(int)
-
-print("Predicted winning numbers for the next draw:")
-print("Numbers: ", predicted_numbers[:5])
-print("Euro Numbers: ", predicted_numbers[5:])
+# Print all 5 predictions
+for i, predicted_numbers in enumerate(predictions):
+    print(f"Prediction {i + 1}:")
+    print("Numbers: ", predicted_numbers[:5])
+    print("Euro Numbers: ", predicted_numbers[5:])
+    print()
